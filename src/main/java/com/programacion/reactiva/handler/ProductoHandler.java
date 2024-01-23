@@ -4,6 +4,7 @@ import com.mongodb.internal.connection.Server;
 import com.programacion.reactiva.models.document.Producto;
 import com.programacion.reactiva.service.ProductoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
@@ -14,8 +15,10 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.io.File;
 import java.net.URI;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class ProductoHandler {
@@ -23,18 +26,28 @@ public class ProductoHandler {
     @Autowired
     private ProductoService productoService;
 
-/**
+    @Value("${config.uploads.path}")
+    private String path;
+    
     public Mono<ServerResponse> upload(ServerRequest request){
         String id=request.pathVariable("id");
         return request.multipartData().map(multipart -> multipart.toSingleValueMap().get("file"))
                 .cast(FilePart.class)
                 .flatMap(file -> productoService.findById(id)
                         .flatMap(p -> {
-                            p.setFoto(file.filename());
+                            p.setFoto(UUID.randomUUID().toString()+"-"+file.filename()
+                            .replace(" ", "-")
+                            .replace(":", "")
+                            .replace(" ", ""));
+                            return file.transferTo(new File(path+p.getFoto())).then(productoService.save(p));
                         }))
+                .flatMap(p -> ServerResponse.created(URI.create("/api/v2/productos".concat(p.getId())))
+                		.contentType(MediaType.APPLICATION_JSON)
+                		.body(BodyInserters.fromValue(p)))
+                .switchIfEmpty(ServerResponse.notFound().build());
 
 
-    }**/
+    }
 
     public Mono<ServerResponse> listar(ServerRequest request) {
         return ServerResponse.ok()
