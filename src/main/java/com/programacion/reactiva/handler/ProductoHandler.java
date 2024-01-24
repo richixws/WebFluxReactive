@@ -28,7 +28,28 @@ public class ProductoHandler {
 
     @Value("${config.uploads.path}")
     private String path;
-    
+
+
+    public Mono<ServerResponse> crearConFoto(ServerRequest request){
+        String id=request.pathVariable("id");
+        return request.multipartData().map(multipart -> multipart.toSingleValueMap().get("file"))
+                .cast(FilePart.class)
+                .flatMap(file -> productoService.findById(id)
+                        .flatMap(p -> {
+                            p.setFoto(UUID.randomUUID().toString()+"-"+file.filename()
+                                    .replace(" ", "-")
+                                    .replace(":", "")
+                                    .replace(" ", ""));
+                            return file.transferTo(new File(path+p.getFoto())).then(productoService.save(p));
+                        }))
+                .flatMap(p -> ServerResponse.created(URI.create("/api/v2/productos".concat(p.getId())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(BodyInserters.fromValue(p)))
+                .switchIfEmpty(ServerResponse.notFound().build());
+    }
+
+
+
     public Mono<ServerResponse> upload(ServerRequest request){
         String id=request.pathVariable("id");
         return request.multipartData().map(multipart -> multipart.toSingleValueMap().get("file"))
@@ -45,8 +66,6 @@ public class ProductoHandler {
                 		.contentType(MediaType.APPLICATION_JSON)
                 		.body(BodyInserters.fromValue(p)))
                 .switchIfEmpty(ServerResponse.notFound().build());
-
-
     }
 
     public Mono<ServerResponse> listar(ServerRequest request) {
